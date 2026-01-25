@@ -1,0 +1,39 @@
+{
+  "mvd_version": "0.1",
+  "creator": "did:key:ed25519:qk0mS6iILvPOq5qs1rC0lVxtsQk/fmzEu9M5zD1td5A=",
+  "curator": "did:key:ed25519:qk0mS6iILvPOq5qs1rC0lVxtsQk/fmzEu9M5zD1td5A=",
+  "p5": {
+    "asset_type": "document",
+    "asset_class": "digital",
+    "asset_utility": "publication",
+    "creator": "did:key:ed25519:qk0mS6iILvPOq5qs1rC0lVxtsQk/fmzEu9M5zD1td5A=",
+    "curator": "did:key:ed25519:qk0mS6iILvPOq5qs1rC0lVxtsQk/fmzEu9M5zD1td5A="
+  },
+  "declared": {
+    "state": "published",
+    "custodian": "did:directory.x1"
+  },
+  "validity": {
+    "valid_from": "2026-01-20T00:00:00Z",
+    "valid_to": null
+  },
+  "labels": {
+    "display_name": "Who Controls 'The Mind' (Academic Paper)"
+  },
+  "external_ids": [
+    { "scheme": "qtm_payload_type", "value": "academic_paper" },
+    { "scheme": "qtm_payload_version", "value": "1.0" },
+    { "scheme": "doi", "value": "10.0000/example.doi" },
+    { "scheme": "source_url", "value": "https://example.org/paper.pdf" },
+    { "scheme": "irp_manifest_spec", "value": "qtm.irp.manifest.v0" },
+    { "scheme": "irp_algorithm", "value": "ed25519" },
+    { "scheme": "irp_payload_sha256", "value": "sha256:d5609a785d74a043c3d571a95d58d28edcc91b1a3afd7a06f998d0d35a53ffd2" },
+    { "scheme": "irp_public_key_base64", "value": "qk0mS6iILvPOq5qs1rC0lVxtsQk/fmzEu9M5zD1td5A=" },
+    { "scheme": "irp_signature_base64", "value": "U17GbQPSs2yRJ3S38cyxi5sK6wBaaSLMrrYeXyzIh7ihEi+XYDDZQ2Oz51uVnlTUgwPB/HZ3cYIXEuUlI6GlCw==" },
+    { "scheme": "pdf_sha256", "value": "sha256:3e8313ceee5f619f81053e41a12e75439f0b8f3bdeaa3bc07d41328b6577d6d4" },
+    { "scheme": "pdf_filename", "value": "Who Controls 'The Mind'.pdf" }
+  ],
+  "provenance": {
+    "nonce": "ccd5d1a6-91ec-43d4-912f-879b1f258e5c"
+  }
+}

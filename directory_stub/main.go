@@ -11,8 +11,19 @@ import (
 	"sort"
 	"strings"
 	"time"
-)
+	"os"
 
+)
+// ---------- Demo asset lookup (fixture-backed, no DB) ----------
+var assetFixtureMap = map[string]string{
+	// Original academic asset
+	"asset:bf90c309b76abbad8d0329a8fc1861404b9e134095a107f97d16884494ff5a25":
+		"/home/qtm/qtm-workspaces/academic-demo/directory_mvd.json",
+
+	// Changed academic asset (sensitivity test)
+	"asset:897c5267976af3abcefed38cca4177f65a5ee540f77dd5cad80e849ff6074992":
+		"/home/qtm/qtm-workspaces/academic-demo/directory_mvd_changed.json",
+}
 // ---------- Canonical JSON (minimal, deterministic) ----------
 
 // canonicalize recursively sorts map keys and preserves array order.
@@ -128,6 +139,18 @@ func computeFingerprintAndAssetID(m map[string]any) (fingerprintSHA string, asse
 	return fingerprintSHA, assetID, nil
 }
 
+func loadJSONFile(path string) (map[string]any, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // ---------- HTTP handlers ----------
 
 type mintResponse struct {
@@ -153,6 +176,61 @@ type listingResponse struct {
 
 func normalizeVisibility(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
+}
+
+type assetViewResponse struct {
+	View        string         `json:"view"`
+	AssetID     string         `json:"asset_id"`
+	MVD         map[string]any `json:"directory_mvd"`
+	Listing     listingResponse `json:"listing"`
+	RenderedAt  string         `json:"rendered_at_utc"`
+}
+
+func assetHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	assetID := strings.TrimSpace(r.URL.Query().Get("asset_id"))
+	if assetID == "" {
+		http.Error(w, "missing required query param: asset_id", http.StatusBadRequest)
+		return
+	}
+
+	path, ok := assetFixtureMap[assetID]
+	if !ok {
+		http.Error(w, "asset_id not found (fixture-backed demo)", http.StatusNotFound)
+		return
+	}
+
+	mvd, err := loadJSONFile(path)
+	if err != nil {
+		http.Error(w, "failed to load fixture json", http.StatusInternalServerError)
+		return
+	}
+
+	// Listing: for this demo endpoint, we do NOT persist listing state.
+	// We return a deterministic default: private + unpaid.
+	listing := listingResponse{
+		AssetID:       assetID,
+		ListingStatus: "private",
+		FeeRequired:   false,
+		CreatedAtUTC:  time.Now().UTC().Format(time.RFC3339),
+	}
+
+	resp := assetViewResponse{
+		View:       "asset_card",
+		AssetID:    assetID,
+		MVD:        mvd,
+		Listing:    listing,
+		RenderedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(resp)
 }
 
 func mintBaseAssetHandler(w http.ResponseWriter, r *http.Request) {
@@ -267,6 +345,7 @@ func main() {
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/mint_base_asset", mintBaseAssetHandler)
 	mux.HandleFunc("/set_listing", setListingHandler)
+	mux.HandleFunc("/asset", assetHandler)
 
 	addr := ":8080"
 	log.Printf("Directory MVP listening on %s", addr)

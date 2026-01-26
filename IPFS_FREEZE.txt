@@ -1,8 +1,8 @@
-Directory v0.3 — LOCAL FREEZE ONLY
+Directory v0.4 — LOCAL FREEZE ONLY
 Status: NOT published to IPFS
 
 Notes:
-- This directory supersedes release_directory_v0.2 locally.
-- Brick A (Idempotency) + Brick B (Listing Toggle) are included and locked.
+- This directory supersedes release_directory_v0.3 locally.
+- Brick F (read-only retrieval endpoint) is included and locked.
 - No IPFS root CID has been generated yet.
 - Do not treat this directory as immutable until explicitly published.

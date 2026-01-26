@@ -1,13 +1,8 @@
-Directory v0.1 + Academic MVP v0.1 — IPFS Freeze Receipt
-Freeze date: 2026-01-25
+Directory v0.3 — LOCAL FREEZE ONLY
+Status: NOT published to IPFS
 
-Root CID:
-ipfs://QmewydJJSPVSCGLzTM9qssdpv76b9W53VDGhj8Jk4zkqt1
-
-Key files:
-README_FREEZE.md: ipfs://QmbyudaV7mnBAYjNzLnTAyVwNeon2UywG56eqssXfWYYzf
-directory_mvd.json: ipfs://QmUfPtYbQpm5j5TyMGeGoTaXs4C87MDB3BTXsAN2rhhet2
-academic/paper_irp/manifest.json: ipfs://QmWhg5QbS7WbFL5LmLFJiKEpBVwvpeLdS893oQkc5iRmQt
-academic/paper_irp/payload.json: ipfs://QmQT5bDXYCNbS6n8gypzV935JrhwMc12ZiwCnyVvqS7dsc
-academic/paper_irp/payload.sha256: ipfs://QmNkWPfcgDxCE7ZmbDpAutBHjyTv8eFAwAFnj6RGaZFArL
-academic/paper_irp/signature.ed25519: ipfs://QmTkjbTbCWe7KZmSc9ag1BVY5tjDpxvFeCYqf211bBdeUL
+Notes:
+- This directory supersedes release_directory_v0.2 locally.
+- Brick A (Idempotency) + Brick B (Listing Toggle) are included and locked.
+- No IPFS root CID has been generated yet.
+- Do not treat this directory as immutable until explicitly published.

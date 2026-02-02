@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 	"os"
+	"path/filepath"
+
 
 )
 // ---------- Demo asset lookup (fixture-backed, no DB) ----------
@@ -23,6 +25,133 @@ var assetFixtureMap = map[string]string{
 	// Changed academic asset (sensitivity test)
 	"asset:897c5267976af3abcefed38cca4177f65a5ee540f77dd5cad80e849ff6074992":
 		"/home/qtm/qtm-workspaces/academic-demo/directory_mvd_changed.json",
+}
+// ---------- Minted asset persistence (append-only JSONL + in-memory index) ----------
+
+const mintedLogPath = "./data/minted_assets.jsonl"
+
+type mintedRecord struct {
+	AssetID           string         `json:"asset_id"`
+	FingerprintSHA256 string         `json:"fingerprint_sha256"`
+	MVD               map[string]any `json:"mvd"`
+	CreatedAtUTC      string         `json:"created_at_utc"`
+}
+
+var mintedIndex = map[string]mintedRecord{}
+
+func ensureParentDir(path string) error {
+	dir := filepath.Dir(path)
+	return os.MkdirAll(dir, 0o755)
+}
+
+func loadMintedIndex(path string) error {
+	mintedIndex = map[string]mintedRecord{}
+
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // no log yet, that's fine
+		}
+		return err
+	}
+
+	lines := strings.Split(string(b), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var rec mintedRecord
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			return fmt.Errorf("parse minted log line: %w", err)
+		}
+		if rec.AssetID != "" {
+			mintedIndex[rec.AssetID] = rec
+		}
+	}
+	return nil
+}
+
+func appendMintedRecord(path string, rec mintedRecord) error {
+	if err := ensureParentDir(path); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	lineBytes, err := json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(append(lineBytes, '\n')); err != nil {
+		return err
+	}
+	return nil
+}
+// ---------- Listing persistence (append-only JSONL + in-memory index) ----------
+
+const listingLogPath = "./data/listings.jsonl"
+
+type listingRecord struct {
+	AssetID       string `json:"asset_id"`
+	Visibility    string `json:"visibility"`      // "private" | "public"
+	Paid          bool   `json:"paid"`            // client assertion for demo
+	ListingStatus string `json:"listing_status"`  // "private" | "payment_required" | "public"
+	FeeRequired   bool   `json:"fee_required"`
+	CreatedAtUTC  string `json:"created_at_utc"`
+}
+
+var listingIndex = map[string]listingRecord{}
+
+func loadListingIndex(path string) error {
+	listingIndex = map[string]listingRecord{}
+
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // no log yet
+		}
+		return err
+	}
+
+	lines := strings.Split(string(b), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var rec listingRecord
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			return fmt.Errorf("parse listing log line: %w", err)
+		}
+		if rec.AssetID != "" {
+			listingIndex[rec.AssetID] = rec
+		}
+	}
+	return nil
+}
+
+func appendListingRecord(path string, rec listingRecord) error {
+	if err := ensureParentDir(path); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	lineBytes, err := json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(append(lineBytes, '\n')); err != nil {
+		return err
+	}
+	return nil
 }
 // ---------- Canonical JSON (minimal, deterministic) ----------
 
@@ -198,9 +327,44 @@ func assetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+		// 1) If minted in this instance (or previously persisted), return minted MVD
+	if rec, ok := mintedIndex[assetID]; ok {
+		resp := assetViewResponse{
+			View:       "asset_card",
+			AssetID:    assetID,
+			MVD:        rec.MVD,
+			Listing: func() listingResponse {
+		if lr, ok := listingIndex[assetID]; ok {
+			return listingResponse{
+				AssetID:       lr.AssetID,
+				ListingStatus: lr.ListingStatus,
+				FeeRequired:   lr.FeeRequired,
+				CreatedAtUTC:  lr.CreatedAtUTC,
+			}
+		}
+			return listingResponse{
+				AssetID:       assetID,
+				ListingStatus: "private",
+				FeeRequired:   false,
+				CreatedAtUTC:  time.Now().UTC().Format(time.RFC3339),
+			}
+		}(),
+
+
+		RenderedAt: time.Now().UTC().Format(time.RFC3339),
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(resp)
+		return
+	}
+
+	// 2) Otherwise fall back to fixtures
 	path, ok := assetFixtureMap[assetID]
 	if !ok {
-		http.Error(w, "asset_id not found (fixture-backed demo)", http.StatusNotFound)
+		http.Error(w, "asset_id not found (minted store + fixture demo)", http.StatusNotFound)
 		return
 	}
 
@@ -210,14 +374,25 @@ func assetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Listing: for this demo endpoint, we do NOT persist listing state.
+	// Listing: for this demo endpoint, we DO persist listing state.
 	// We return a deterministic default: private + unpaid.
-	listing := listingResponse{
-		AssetID:       assetID,
-		ListingStatus: "private",
-		FeeRequired:   false,
-		CreatedAtUTC:  time.Now().UTC().Format(time.RFC3339),
-	}
+	// Listing: return persisted listing if present; otherwise default private.
+	listing := func() listingResponse {
+		if lr, ok := listingIndex[assetID]; ok {
+			return listingResponse{
+				AssetID:       lr.AssetID,
+				ListingStatus: lr.ListingStatus,
+				FeeRequired:   lr.FeeRequired,
+				CreatedAtUTC:  lr.CreatedAtUTC,
+			}
+		}
+		return listingResponse{
+			AssetID:       assetID,
+			ListingStatus: "private",
+			FeeRequired:   false,
+			CreatedAtUTC:  time.Now().UTC().Format(time.RFC3339),
+		}
+	}()
 
 	resp := assetViewResponse{
 		View:       "asset_card",
@@ -256,6 +431,19 @@ func mintBaseAssetHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "mint rejected: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+		// Persist minted asset (append-only) + update in-memory index.
+	rec := mintedRecord{
+		AssetID:           assetID,
+		FingerprintSHA256: "sha256:" + fp,
+		MVD:               req,
+		CreatedAtUTC:      time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := appendMintedRecord(mintedLogPath, rec); err != nil {
+		http.Error(w, "failed to persist minted asset", http.StatusInternalServerError)
+		return
+	}
+	mintedIndex[assetID] = rec
+
 
 	mvdVersion, _ := req["mvd_version"].(string)
 
@@ -328,6 +516,21 @@ func setListingHandler(w http.ResponseWriter, r *http.Request) {
 		FeeRequired:   feeRequired,
 		CreatedAtUTC:  time.Now().UTC().Format(time.RFC3339),
 	}
+		// Persist listing state (append-only) + update in-memory index.
+	rec := listingRecord{
+		AssetID:       resp.AssetID,
+		Visibility:    req.Visibility,
+		Paid:          req.Paid,
+		ListingStatus: resp.ListingStatus,
+		FeeRequired:   resp.FeeRequired,
+		CreatedAtUTC:  resp.CreatedAtUTC,
+	}
+	if err := appendListingRecord(listingLogPath, rec); err != nil {
+		http.Error(w, "failed to persist listing", http.StatusInternalServerError)
+		return
+	}
+	listingIndex[resp.AssetID] = rec
+
 
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
@@ -342,6 +545,27 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	mux := http.NewServeMux()
+
+	if err := loadMintedIndex(mintedLogPath); err != nil {
+		log.Fatalf("failed to load minted index: %v", err)
+	}
+	if err := loadListingIndex(listingLogPath); err != nil {
+		log.Fatalf("failed to load listing index: %v", err)
+}
+	// --- UI (static) ---
+	// Serves files from ./ui at /ui/
+	fs := http.FileServer(http.Dir("./ui"))
+	mux.Handle("/ui/", http.StripPrefix("/ui/", fs))
+
+	// Friendly root redirect to UI
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		http.Redirect(w, r, "/ui/", http.StatusFound)
+	})
+
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/mint_base_asset", mintBaseAssetHandler)
 	mux.HandleFunc("/set_listing", setListingHandler)

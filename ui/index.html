@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>QTM Directory MVP UI (v0.4)</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; max-width: 980px; }
+    textarea, input, select { width: 100%; padding: 10px; margin: 6px 0 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    button { padding: 10px 14px; margin-right: 8px; cursor: pointer; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 14px; margin: 12px 0; }
+    pre { background: #f6f6f6; padding: 12px; border-radius: 10px; overflow: auto; }
+    .small { color: #666; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>QTM Directory MVP UI (v0.4)</h1>
+  <p class="small">Calls existing endpoints only: <code>/mint_base_asset</code>, <code>/asset?asset_id=...</code>, <code>/set_listing</code>, <code>/health</code></p>
+
+  <div class="card">
+    <h2>1) Health</h2>
+    <button id="btnHealth">GET /health</button>
+    <pre id="outHealth">(no output)</pre>
+  </div>
+
+  <div class="card">
+    <h2>2) Mint base asset (deterministic)</h2>
+    <div class="row">
+      <div>
+        <label><strong>Request JSON</strong></label>
+        <textarea id="mintJson" rows="18">
+{
+  "mvd_version": "0.1",
+  "labels": { "display_name": "demo asset" },
+  "provenance": { "nonce": "demo-001" },
+  "p5": { "asset_type": "example" },
+  "declared": { "custodian": "demo" },
+  "validity": { "from": "2026-01-01T00:00:00Z" },
+  "external_ids": [],
+  "actors": []
+}
+        </textarea>
+        <button id="btnMint">POST /mint_base_asset</button>
+      </div>
+
+      <div>
+        <label><strong>Mint response</strong></label>
+        <pre id="outMint">(no output)</pre>
+        <label><strong>Asset ID</strong></label>
+        <input id="assetId" placeholder="asset:..." />
+        <button id="btnLoadFixture1">Load Fixture Asset #1</button>
+        <button id="btnLoadFixture2">Load Fixture Asset #2</button>
+        <p class="small">Fixture buttons load the two hardcoded fixture asset_ids from <code>assetFixtureMap</code> in <code>main.go</code>.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>3) Retrieve asset view (Brick F: read-only)</h2>
+    <button id="btnGetAsset">GET /asset?asset_id=...</button>
+    <pre id="outAsset">(no output)</pre>
+  </div>
+
+  <div class="card">
+    <h2>4) Set listing (visibility)</h2>
+    <div class="row">
+      <div>
+        <label><strong>Visibility</strong></label>
+        <select id="visibility">
+          <option value="private">private</option>
+          <option value="public">public</option>
+        </select>
+
+        <label><strong>Paid</strong> (only matters when visibility=public)</label>
+        <select id="paid">
+          <option value="false">false</option>
+          <option value="true">true</option>
+        </select>
+
+        <button id="btnSetListing">POST /set_listing</button>
+      </div>
+      <div>
+        <label><strong>Set listing response</strong></label>
+        <pre id="outListing">(no output)</pre>
+        <p class="small">
+          Note: current server implementation does not persist listing state; it returns a computed response only.
+        </p>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  async function pretty(res) {
+    const text = await res.text();
+    try { return JSON.stringify(JSON.parse(text), null, 2); }
+    catch { return text; }
+  }
+
+  $("btnHealth").onclick = async () => {
+    const res = await fetch("/health");
+    $("outHealth").textContent = await res.text();
+  };
+
+  $("btnMint").onclick = async () => {
+    let body;
+    try { body = JSON.stringify(JSON.parse($("mintJson").value)); }
+    catch (e) { $("outMint").textContent = "Invalid JSON in request box"; return; }
+
+    const res = await fetch("/mint_base_asset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body
+    });
+
+    const out = await pretty(res);
+    $("outMint").textContent = out;
+
+    try {
+      const j = JSON.parse(out);
+      if (j.asset_id) $("assetId").value = j.asset_id;
+    } catch {}
+  };
+
+  // Fixture IDs (must match your current main.go map)
+  const FIXTURE_1 = "asset:bf90c309b76abbad8d0329a8fc1861404b9e134095a107f97d16884494ff5a25";
+  const FIXTURE_2 = "asset:897c5267976af3abcefed38cca4177f65a5ee540f77dd5cad80e849ff6074992";
+
+  $("btnLoadFixture1").onclick = () => { $("assetId").value = FIXTURE_1; };
+  $("btnLoadFixture2").onclick = () => { $("assetId").value = FIXTURE_2; };
+
+  $("btnGetAsset").onclick = async () => {
+    const assetId = $("assetId").value.trim();
+    if (!assetId) { $("outAsset").textContent = "Missing asset_id"; return; }
+    const res = await fetch(`/asset?asset_id=${encodeURIComponent(assetId)}`);
+    $("outAsset").textContent = await pretty(res);
+  };
+
+  $("btnSetListing").onclick = async () => {
+    const assetId = $("assetId").value.trim();
+    if (!assetId) { $("outListing").textContent = "Missing asset_id"; return; }
+
+    const payload = {
+      asset_id: assetId,
+      visibility: $("visibility").value,
+      paid: $("paid").value === "true"
+    };
+
+    const res = await fetch("/set_listing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    $("outListing").textContent = await pretty(res);
+  };
+</script>
+</body>
+</html>

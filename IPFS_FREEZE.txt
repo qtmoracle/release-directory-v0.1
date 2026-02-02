@@ -13,6 +13,6 @@ git_commit: c868048
 git_tag: v0.4.0-directory-mvp
 ipfs_root_cid: QmcAornreC2GsAirX2PATBiBoSaK8AetQpNtDuLL2cRNyg
 ipfs_added_flags: ipfs add -r --pin=true --ignore-rules-path .gitignore --ignore "data" --ignore "data/**" .
-ipfs_added_at_utc: 2026-02-02T01:25:44Z
+ipfs_added_at_utc: 2026-02-02T01:27:53Z
 notes: canonical repo freeze; runtime logs excluded (data/)
 ============================================================
